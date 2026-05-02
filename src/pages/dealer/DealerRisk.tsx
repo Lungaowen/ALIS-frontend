@@ -1,0 +1,152 @@
+import { useEffect, useMemo, useState } from "react";
+import { Download, Sparkles, Loader2 } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip,
+} from "recharts";
+import { PortalLayout } from "@/components/app/PortalLayout";
+import { Spinner, EmptyState, ProgressBar } from "@/components/app/Primitives";
+import { RiskBadge } from "@/components/app/StatusBadges";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
+import { downloadReportPdf, listReportsForClient, type ReportInfo } from "@/lib/alis";
+import { toast } from "sonner";
+
+export default function DealerRiskPage() {
+  const { session } = useAuth();
+  const [reports, setReports] = useState<ReportInfo[] | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+    listReportsForClient(session.clientId)
+      .then((r) => setReports(Array.isArray(r) ? r : []))
+      .catch((e) => { toast.error(e?.message ?? "Failed to load reports"); setReports([]); });
+  }, [session]);
+
+  const counts = useMemo(() => {
+    const c = { LOW: 0, MEDIUM: 0, HIGH: 0 } as Record<"LOW" | "MEDIUM" | "HIGH", number>;
+    (reports ?? []).forEach((r) => { c[r.riskLevel] = (c[r.riskLevel] ?? 0) + 1; });
+    return c;
+  }, [reports]);
+
+  const trend = useMemo(() => {
+    return (reports ?? [])
+      .slice()
+      .sort((a, b) => +new Date(a.generatedAt) - +new Date(b.generatedAt))
+      .map((r) => ({ label: new Date(r.generatedAt).toLocaleDateString(), score: Math.round(r.similarityScore ?? 0) }));
+  }, [reports]);
+
+  const latest = useMemo(() => {
+    return (reports ?? [])
+      .slice()
+      .sort((a, b) => +new Date(b.generatedAt) - +new Date(a.generatedAt))[0];
+  }, [reports]);
+
+  if (!reports) return <PortalLayout title="Risk & Compliance Summary"><Spinner /></PortalLayout>;
+
+  return (
+    <PortalLayout
+      title="Risk & Compliance Summary"
+      eyebrow="Deal Maker"
+      description="A consolidated view of every report ALIS has generated for your deals."
+    >
+      {reports.length === 0 ? (
+        <EmptyState title="No reports yet" description="Submit a document for analysis to see your risk profile." />
+      ) : (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border border-accent/40 bg-accent/5 p-5">
+              <p className="text-mono text-[10px] uppercase tracking-[0.2em] text-accent">Low Risk</p>
+              <p className="mt-2 text-display text-3xl font-semibold">{counts.LOW}</p>
+            </div>
+            <div className="rounded-lg border border-gold/40 bg-gold/5 p-5">
+              <p className="text-mono text-[10px] uppercase tracking-[0.2em] text-gold-foreground">Medium Risk</p>
+              <p className="mt-2 text-display text-3xl font-semibold">{counts.MEDIUM}</p>
+            </div>
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5">
+              <p className="text-mono text-[10px] uppercase tracking-[0.2em] text-destructive">High Risk</p>
+              <p className="mt-2 text-display text-3xl font-semibold">{counts.HIGH}</p>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-card p-5">
+            <h2 className="text-base font-semibold">Score trend over time</h2>
+            <div className="mt-3 h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trend}>
+                  <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="score" stroke="hsl(var(--accent))" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {latest && (
+            <div className="rounded-lg border border-accent/30 bg-accent/5 p-6">
+              <p className="text-mono text-[10px] uppercase tracking-[0.2em] text-accent">
+                <Sparkles className="mr-1 inline h-3 w-3" /> AI Risk Brief
+              </p>
+              <h2 className="mt-2 text-display text-xl font-semibold">{latest.documentTitle}</h2>
+              <div className="mt-2 flex items-center gap-2">
+                <RiskBadge level={latest.riskLevel} />
+                <span className="text-xs text-muted-foreground">Generated {new Date(latest.generatedAt).toLocaleString()}</span>
+              </div>
+              <blockquote className="mt-4 rounded-md border-l-4 border-accent bg-card p-4 text-sm text-muted-foreground whitespace-pre-wrap">
+                {latest.aiRecommendation}
+              </blockquote>
+              <p className="mt-3 text-[11px] text-muted-foreground">Generated by ALIS AI — {latest.modelVersion ?? "llama-3.3-70b-versatile"}</p>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-border bg-card">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left">Document</th>
+                  <th className="px-4 py-3 text-left">Risk</th>
+                  <th className="px-4 py-3 text-left w-44">Score</th>
+                  <th className="px-4 py-3 text-left">Act</th>
+                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3 text-right">Download</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reports.map((r) => (
+                  <tr key={r.reportId} className="border-t border-border">
+                    <td className="px-4 py-3 font-medium">{r.documentTitle}</td>
+                    <td className="px-4 py-3"><RiskBadge level={r.riskLevel} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <ProgressBar value={r.similarityScore ?? 0} />
+                        <span className="text-xs text-muted-foreground">{Math.round(r.similarityScore ?? 0)}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{r.actName ?? "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{new Date(r.generatedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          setDownloadingId(r.reportId);
+                          try { await downloadReportPdf(r.reportId, `${r.documentTitle}.pdf`); }
+                          catch (e) { toast.error((e as Error)?.message ?? "Download failed"); }
+                          finally { setDownloadingId(null); }
+                        }}
+                      >
+                        {downloadingId === r.reportId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Download className="mr-1 h-3 w-3" /> PDF</>}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </PortalLayout>
+  );
+}
