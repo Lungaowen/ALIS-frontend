@@ -22,8 +22,13 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  adminDeleteClient, adminFilterClients, adminListClients, adminUpdateClient,
-  getResult, type ClientRecord, type RiskLevel,
+  adminDeleteClient,
+  adminListClients,
+  adminListClientsByRole,
+  adminUpdateClient,
+  getResult,
+  type ClientRecord,
+  type RiskLevel,
 } from "@/lib/alis";
 import type { Role } from "@/lib/auth";
 import { toast } from "sonner";
@@ -43,6 +48,12 @@ function unwrap(res: unknown): ClientRecord[] {
   return r.content ?? r.items ?? [];
 }
 
+function extractTotalPages(res: unknown): number {
+  if (Array.isArray(res)) return 1;
+  const tp = (res as { totalPages?: number }).totalPages;
+  return tp && tp > 0 ? tp : 1;
+}
+
 export default function AdminClientsPage() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,61 +61,105 @@ export default function AdminClientsPage() {
   const [size] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Filter state
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "ALL">("ALL");
   const [from, setFrom] = useState<Date | undefined>();
   const [to, setTo] = useState<Date | undefined>();
 
+  // Client‑side filtering active only when search or date range is used
+  const [useClientFilter, setUseClientFilter] = useState(false);
+
+  // Drawer & delete
   const [selected, setSelected] = useState<ClientRecord | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<ClientRecord | null>(null);
   const [riskMap, setRiskMap] = useState<Record<number, RiskLevel | "NONE" | "LOADING">>({});
 
-  const load = useCallback(async () => {
+  // ---------- Data fetching ----------
+  const fetchPage = useCallback(async (pageNum: number) => {
     setLoading(true);
     try {
-      const res = await adminListClients(page, size);
-      setClients(unwrap(res));
-      const tp = (res as { totalPages?: number }).totalPages;
-      setTotalPages(tp && tp > 0 ? tp : 1);
+      let res;
+      if (useClientFilter) {
+        // When search/date are active, fetch all (or as many as possible) to filter in memory
+        if (roleFilter === "ALL") {
+          res = await adminListClients(0, 9999); // get all clients
+        } else {
+          res = await adminListClientsByRole(roleFilter, 0, 9999);
+        }
+        const all = unwrap(res);
+        // Apply client‑side filters
+        let filtered = all;
+        if (search.trim()) {
+          const q = search.toLowerCase();
+          filtered = filtered.filter(
+            (c) =>
+              c.fullName.toLowerCase().includes(q) ||
+              c.email.toLowerCase().includes(q)
+          );
+        }
+        if (from) {
+          const fromDate = new Date(from);
+          fromDate.setHours(0, 0, 0, 0);
+          filtered = filtered.filter(
+            (c) => c.registeredAt && new Date(c.registeredAt) >= fromDate
+          );
+        }
+        if (to) {
+          const toDate = new Date(to);
+          toDate.setHours(23, 59, 59, 999);
+          filtered = filtered.filter(
+            (c) => c.registeredAt && new Date(c.registeredAt) <= toDate
+          );
+        }
+        setClients(filtered);
+        setTotalPages(1); // single page for local filtering
+      } else {
+        // Server‑side pagination (no search/date active)
+        if (roleFilter === "ALL") {
+          res = await adminListClients(pageNum, size);
+        } else {
+          res = await adminListClientsByRole(roleFilter, pageNum, size);
+        }
+        setClients(unwrap(res));
+        setTotalPages(extractTotalPages(res));
+      }
     } catch (e) {
       toast.error((e as Error)?.message ?? "Failed to load clients");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, size]);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function applyFilter() {
-    setLoading(true);
-    try {
-      const res = await adminFilterClients({
-        searchQuery: search || undefined,
-        role: roleFilter === "ALL" ? null : roleFilter,
-        registeredFrom: from ? format(from, "yyyy-MM-dd") : null,
-        registeredTo: to ? format(to, "yyyy-MM-dd") : null,
-      });
-      setClients(unwrap(res));
+      setClients([]);
       setTotalPages(1);
-      setPage(0);
-    } catch (e) {
-      toast.error((e as Error)?.message ?? "Filter failed");
     } finally {
       setLoading(false);
     }
-  }
+  }, [roleFilter, useClientFilter, search, from, to, size]);
 
-  function clearFilters() {
-    setSearch(""); setRoleFilter("ALL"); setFrom(undefined); setTo(undefined); setPage(0);
-    load();
-  }
+  // Initial load & when page or filters change
+  useEffect(() => {
+    fetchPage(page);
+  }, [page, fetchPage]);
 
+  // Determine if we need client‑side filtering
+  useEffect(() => {
+    setUseClientFilter(!!(search.trim() || from || to));
+  }, [search, from, to]);
+
+  // Reset to page 0 whenever filters change
+  useEffect(() => {
+    setPage(0);
+  }, [roleFilter, search, from, to, useClientFilter]);
+
+  const clearFilters = () => {
+    setSearch("");
+    setRoleFilter("ALL");
+    setFrom(undefined);
+    setTo(undefined);
+  };
+
+  // ---------- Risk helper ----------
   async function fetchRisk(c: ClientRecord) {
     setRiskMap((m) => ({ ...m, [c.clientId]: "LOADING" }));
     try {
-      // We don't have a direct endpoint for "latest document"; pretend documentCount > 0 means try clientId mapping.
-      // Backend exposes /api/compliance/result/{documentId}. Without it, we surface an inline message.
       const r = await getResult(c.clientId);
       setRiskMap((m) => ({ ...m, [c.clientId]: r.riskLevel ?? "NONE" }));
     } catch {
@@ -118,7 +173,7 @@ export default function AdminClientsPage() {
       eyebrow="Administration"
       description="Search, filter, edit, and audit every client in the platform."
     >
-      {/* Filter bar */}
+      {/* Filter bar – simplified: no separate apply button; filters auto‑refresh */}
       <div className="mb-5 grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-5">
         <Input
           placeholder="Search by name or email"
@@ -133,10 +188,7 @@ export default function AdminClientsPage() {
         </Select>
         <DatePickerField label="From" value={from} onChange={setFrom} />
         <DatePickerField label="To" value={to} onChange={setTo} />
-        <div className="flex gap-2">
-          <Button onClick={applyFilter} className="flex-1">Filter</Button>
-          <Button variant="outline" onClick={clearFilters}>Clear</Button>
-        </div>
+        <Button variant="outline" onClick={clearFilters}>Clear</Button>
       </div>
 
       {loading ? (
@@ -172,9 +224,12 @@ export default function AdminClientsPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : "—"}
+                      {/* prefer createdAt, fallback to registeredAt */}
+                      {(c.createdAt || c.registeredAt)
+                        ? new Date(c.createdAt ?? c.registeredAt!).toLocaleDateString()
+                        : "—"}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.documentCount ?? 0}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{c.documentCount != null ? c.documentCount : "—"}</td>
                     <td className="px-4 py-3">
                       {risk === "LOADING" ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -197,19 +252,22 @@ export default function AdminClientsPage() {
             </tbody>
           </table>
 
-          <div className="flex items-center justify-between border-t border-border px-4 py-3">
-            <span className="text-xs text-muted-foreground">
-              Page {page + 1} of {totalPages}
-            </span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-                <ChevronLeft className="h-3.5 w-3.5" /> Prev
-              </Button>
-              <Button size="sm" variant="outline" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Next <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
+          {/* Pagination – only show when using server‑side pagination */}
+          {!useClientFilter && (
+            <div className="flex items-center justify-between border-t border-border px-4 py-3">
+              <span className="text-xs text-muted-foreground">
+                Page {page + 1} of {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+                  <ChevronLeft className="h-3.5 w-3.5" /> Prev
+                </Button>
+                <Button size="sm" variant="outline" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  Next <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

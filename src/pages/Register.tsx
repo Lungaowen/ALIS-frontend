@@ -25,7 +25,7 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("USER");
+  const [role, setRole] = useState<Role>("DEAL_MAKER"); // default to Deal Maker
   const [companyName, setCompanyName] = useState("");
   const [dealSpecialty, setDealSpecialty] = useState("");
   const [barNumber, setBarNumber] = useState("");
@@ -55,7 +55,7 @@ export default function RegisterPage() {
       await register(payload);
       toast.success("Account created");
 
-      // Automatically log in and redirect to role‑specific dashboard
+      // Auto‑login and redirect to the role’s dashboard
       const session = await login(email, password);
       const home = ROLE_HOME[session.role] ?? "/user/dashboard";
       navigate(home, { replace: true });
@@ -120,9 +120,10 @@ export default function RegisterPage() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            {role === "USER" && "Basic access — upload documents and receive compliance reports."}
-            {role === "DEAL_MAKER" && "For investors & dealmakers — access deal readiness scores."}
-            {role === "LEGAL_PRACTITIONER" && "For lawyers — rule workspace and deeper analysis."}
+            {role === "DEAL_MAKER" &&
+              "For investors & dealmakers — access deal readiness scores."}
+            {role === "LEGAL_PRACTITIONER" &&
+              "For lawyers — rule workspace and deeper analysis."}
           </p>
         </div>
 

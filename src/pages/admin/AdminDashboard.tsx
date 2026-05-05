@@ -5,24 +5,13 @@ import {
 import { PortalLayout } from "@/components/app/PortalLayout";
 import { StatCard, Spinner, EmptyState } from "@/components/app/Primitives";
 import {
-  adminDashboard, adminRecentAudit, type AdminDashboardData, type AuditEntry,
+  adminDashboard, adminRecentAudit, type AdminDashboard, type AuditEntry,
 } from "@/lib/alis";
 import { toast } from "sonner";
 
-function normalizeRoleDist(d: AdminDashboardData["roleDistribution"]) {
-  if (!d) return [];
-  if (Array.isArray(d)) return d.map((x) => ({ role: x.role, count: x.count }));
-  return Object.entries(d).map(([role, count]) => ({ role, count: Number(count) }));
-}
-
-function normalizeUploadTrend(t: AdminDashboardData["uploadTrend"]) {
-  if (!t) return [];
-  return t.map((p) => ({ label: p.month ?? p.date ?? "", count: p.count }));
-}
-
 export default function AdminDashboardPage() {
-  const [data, setData] = useState<AdminDashboardData | null>(null);
-  const [audit, setAudit] = useState<AuditEntry[] | null>(null);
+  const [data, setData] = useState<AdminDashboard | null>(null);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,13 +24,15 @@ export default function AdminDashboardPage() {
       })
       .catch((e) => toast.error(e?.message ?? "Failed to load dashboard"))
       .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false };
   }, []);
 
-  const roleDist = normalizeRoleDist(data?.roleDistribution);
-  const trend = normalizeUploadTrend(data?.uploadTrend);
+  const stats = data?.stats;
+  const roleDist = data?.roleDistribution ?? [];
+  const trend = (data?.uploadTrend ?? []).map((p) => ({
+    label: p.label,
+    count: p.count,
+  }));
 
   return (
     <PortalLayout
@@ -54,10 +45,17 @@ export default function AdminDashboardPage() {
       ) : (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total Clients" value={data?.totalClients ?? 0} />
-            <StatCard label="Total Documents" value={data?.totalDocuments ?? 0} />
-            <StatCard label="Total Reports" value={data?.totalReports ?? 0} tone="accent" />
-            <StatCard label="High Risk Documents" value={data?.highRiskDocuments ?? 0} tone="destructive" />
+            <StatCard label="Total Clients" value={stats?.totalClients ?? 0} />
+            <StatCard label="Total Documents" value={stats?.totalDocuments ?? 0} />
+            <StatCard label="Total Reports" value={stats?.totalReports ?? 0} tone="accent" />
+            <StatCard label="High Risk Reports" value={stats?.highRiskReports ?? 0} tone="destructive" />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Active Clients" value={stats?.activeClients ?? 0} />
+            <StatCard label="Pending Docs" value={stats?.pendingDocuments ?? 0} />
+            <StatCard label="Failed Docs" value={stats?.failedDocuments ?? 0} />
+            <StatCard label="Processed Docs" value={stats?.processedDocuments ?? 0} />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
@@ -104,10 +102,43 @@ export default function AdminDashboardPage() {
 
           <div className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-5 py-4">
+              <h2 className="text-base font-semibold">Recent Platform Documents</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Latest 5 uploads across all clients.</p>
+            </div>
+            {data?.recentDocuments?.length ? (
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                  <tr>
+                    <th className="px-5 py-3 text-left">Title</th>
+                    <th className="px-5 py-3 text-left">Client</th>
+                    <th className="px-5 py-3 text-left">Status</th>
+                    <th className="px-5 py-3 text-left">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.recentDocuments.slice(0, 5).map((doc) => (
+                    <tr key={doc.documentId} className="border-t border-border">
+                      <td className="px-5 py-3 font-medium truncate max-w-[200px]">{doc.title}</td>
+                      <td className="px-5 py-3">{doc.clientName}</td>
+                      <td className="px-5 py-3 capitalize">{doc.status.toLowerCase()}</td>
+                      <td className="px-5 py-3 text-muted-foreground">
+                        {new Date(doc.uploadedAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <EmptyState title="No recent documents" />
+            )}
+          </div>
+
+          <div className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-5 py-4">
               <h2 className="text-base font-semibold">Recent activity</h2>
               <p className="mt-1 text-xs text-muted-foreground">Latest 5 audit events.</p>
             </div>
-            {audit && audit.length > 0 ? (
+            {audit.length > 0 ? (
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                   <tr>
@@ -121,7 +152,7 @@ export default function AdminDashboardPage() {
                   {audit.map((a) => (
                     <tr key={a.logId} className="border-t border-border">
                       <td className="px-5 py-3 text-muted-foreground">
-                        {new Date(a.timestamp).toLocaleString()}
+                        {new Date(a.createdAt).toLocaleString()}
                       </td>
                       <td className="px-5 py-3 font-medium">{a.actionType}</td>
                       <td className="px-5 py-3">{a.description}</td>

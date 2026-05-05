@@ -55,14 +55,7 @@ export function ApiBaseDialog() {
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="text-display text-2xl">API server</DialogTitle>
-          <DialogDescription>
-            Point the client at a different ALIS backend. Use an HTTPS tunnel
-            (cloudflared, ngrok) when running this preview against a local
-            backend — browsers block <code className="text-mono">http://localhost</code> from HTTPS pages.
-          </DialogDescription>
-        </DialogHeader>
+        
 
         <div className="space-y-2">
           <Label htmlFor="api-base">Base URL</Label>

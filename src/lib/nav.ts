@@ -29,23 +29,27 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: "/admin/clients", label: "Clients", iconName: "Users" },
     { to: "/admin/audit", label: "Audit Log", iconName: "ScrollText" },
     { to: "/admin/reports", label: "Reports", iconName: "BarChart3" },
+    { to: "/profile", label: "My Profile", iconName: "User" },
   ],
   LEGAL_PRACTITIONER: [
     { to: "/legal/dashboard", label: "Dashboard", iconName: "Gauge" },
     { to: "/legal/documents", label: "My Documents", iconName: "FileText" },
     { to: "/legal/rules", label: "Rules Workspace", iconName: "Gavel" },
     { to: "/legal/reports", label: "Compliance Reports", iconName: "ClipboardCheck" },
+    { to: "/profile", label: "My Profile", iconName: "User" },
   ],
   DEAL_MAKER: [
     { to: "/dealer/dashboard", label: "Overview", iconName: "Gauge" },
     { to: "/dealer/upload", label: "Upload & Analyze", iconName: "UploadCloud" },
     { to: "/dealer/deals", label: "My Deals", iconName: "Briefcase" },
     { to: "/dealer/risk", label: "Risk Summary", iconName: "ShieldAlert" },
+    { to: "/profile", label: "My Profile", iconName: "User" },
   ],
   USER: [
     { to: "/user/dashboard", label: "Home", iconName: "Home" },
     { to: "/user/upload", label: "Upload", iconName: "UploadCloud" },
     { to: "/user/documents", label: "My Documents", iconName: "FileText" },
     { to: "/user/reports", label: "My Reports", iconName: "ClipboardCheck" },
+    { to: "/profile", label: "My Profile", iconName: "User" },
   ],
 };

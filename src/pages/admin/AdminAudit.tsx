@@ -39,7 +39,9 @@ export default function AdminAuditPage() {
     return entries.filter((e) => {
       if (action !== "ALL" && e.actionType !== action) return false;
       if (search && !`${e.description} ${e.actionType}`.toLowerCase().includes(search.toLowerCase())) return false;
-      const ts = new Date(e.timestamp).getTime();
+
+      // ✅ FIX 1: use createdAt instead of timestamp in the filter
+      const ts = new Date(e.createdAt).getTime();
       if (from && ts < from.getTime()) return false;
       if (to && ts > to.getTime() + 86_400_000) return false;
       return true;
@@ -105,7 +107,8 @@ export default function AdminAuditPage() {
               {filtered.map((e) => (
                 <tr key={e.logId} className="border-t border-border">
                   <td className="px-4 py-3 text-mono text-xs text-muted-foreground">#{e.logId}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{new Date(e.timestamp).toLocaleString()}</td>
+                  {/* ✅ FIX 2: use createdAt instead of timestamp in the cell */}
+                  <td className="px-4 py-3 text-muted-foreground">{new Date(e.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-3">
                     <Badge variant="outline" className="text-mono text-[10px] uppercase tracking-[0.16em]">{e.actionType}</Badge>
                   </td>

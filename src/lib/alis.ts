@@ -13,6 +13,7 @@ export type DocumentStatus =
   | string;
 export type AnalysisStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | string;
 
+// ---------- Types ----------
 export interface DocumentItem {
   documentId: number;
   title: string;
@@ -97,29 +98,77 @@ export interface ClientRecord {
   email: string;
   role: import("./auth").Role;
   active?: boolean;
-  registeredAt?: string;
-  documentCount?: number;
+  createdAt?: string;          // ← backend sends this
+  registeredAt?: string;       // keep for backward compatibility (other endpoints might use it)
+  documentCount?: number;      // still optional; the /by-role endpoint doesn't send it
+  username?: string;           // backend also includes this
   companyName?: string;
 }
 
-export interface AdminDashboardData {
-  totalClients?: number;
-  totalDocuments?: number;
-  totalReports?: number;
-  highRiskDocuments?: number;
-  roleDistribution?: Array<{ role: string; count: number }> | Record<string, number>;
-  uploadTrend?: Array<{ date?: string; month?: string; count: number }>;
+// Correctly matches the real GET /api/admin/dashboard response
+export interface AdminDashboard {
+  stats: {
+    totalClients: number;
+    totalDocuments: number;
+    totalReports: number;
+    activeClients: number;
+    pendingDocuments: number;
+    failedDocuments: number;
+    processedDocuments: number;
+    highRiskReports: number;
+  };
+  clients: Array<{
+    clientId: number;
+    fullName: string;
+    email: string;
+    role: string;
+    registeredAt: string;
+    documentCount: number;
+    recentDocuments: null | unknown;
+  }>;
+  recentDocuments: Array<{
+    documentId: number;
+    title: string;
+    status: string;
+    ingestionSource: string;
+    uploadedAt: string;
+    filePath: string;
+    fileUrl: string;
+    clientId: number;
+    clientName: string;
+  }>;
+  reports: Array<{
+    reportId: number;
+    documentId: number;
+    documentTitle: string;
+    clientId: number | null;
+    clientName: string | null;
+    riskLevel: string;
+    analysisStatus: string;
+    similarityScore: null | number;
+    aiRecommendation: string;
+    aiExplanation: null | string;
+    generatedAt: string;
+    modelVersion: string;
+    lawRuleId: null | number;
+    lawRuleKeyword: null | string;
+    actName: null | string;
+  }>;
+  roleDistribution: Array<{ role: string; count: number }>;
+  riskDistribution: Array<{ riskLevel: string; count: number }>;
+  uploadTrend: Array<{ year: number; month: number; count: number; label: string }>;
 }
 
 export interface AuditEntry {
   logId: number;
-  timestamp: string;
+  createdAt: string;        // ← correct field
   actionType: string;
   description: string;
   clientId?: number;
   documentId?: number;
   ipAddress?: string;
   clientName?: string;
+  adminId?: number | null;
 }
 
 export interface RoleDistributionRow {
@@ -127,10 +176,21 @@ export interface RoleDistributionRow {
   count: number;
   percentage?: number;
 }
+export interface RoleDistributionResponse {
+  countByRole: Record<string, number>;
+  totalClients: number;
+}
 
 export interface RegistrationTrendRow {
   month: string;
   count: number;
+}
+export interface RegistrationTrendResponse {
+    trend: Array<{
+    year: number;
+    month: number;   // 1‑12
+    count: number;
+  }>;
 }
 
 export interface TopUploaderRow {
@@ -141,6 +201,52 @@ export interface TopUploaderRow {
   role: string;
   documentsUploaded?: number;
   count?: number;
+}
+export interface TopUploaderResponse {
+  content: Array<{
+    clientId: number;
+    fullName: string;
+    email: string;
+    role: string;
+    documentCount: number;
+  }>;
+  totalElements: number;
+  totalPages: number;
+  // …other pageable fields
+}
+
+export interface PagedClients {
+  content?: ClientRecord[];
+  items?: ClientRecord[];
+  totalPages?: number;
+  totalElements?: number;
+  number?: number;
+  size?: number;
+}
+
+export interface ClientFilter {
+  searchQuery?: string;
+  role?: string | null;
+  registeredFrom?: string | null;
+  registeredTo?: string | null;
+}
+export interface ClientProfile {
+  clientId?: number;
+  fullName: string;
+  email: string;
+  username?: string;
+  role?: string;
+  createdAt?: string;
+}
+export interface UpdateProfileRequest {
+  fullName?: string;
+  username?: string;
+  currentPassword?: string;  // added
+  newPassword?: string;      // added
+}
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }
 
 // ---------- Documents ----------
@@ -206,25 +312,11 @@ export const listReportsForClient = (clientId: number) =>
   httpGet<ReportInfo[]>(`/api/reports/client/${clientId}`);
 
 // ---------- Admin ----------
-export const adminDashboard = () => httpGet<AdminDashboardData>("/api/admin/dashboard");
+export const adminDashboard = () => httpGet<AdminDashboard>("/api/admin/dashboard");
 
-export interface PagedClients {
-  content?: ClientRecord[];
-  items?: ClientRecord[];
-  totalPages?: number;
-  totalElements?: number;
-  number?: number;
-  size?: number;
-}
 export const adminListClients = (page = 0, size = 20) =>
   httpGet<PagedClients | ClientRecord[]>(`/api/admin/clients?page=${page}&size=${size}`);
 
-export interface ClientFilter {
-  searchQuery?: string;
-  role?: string | null;
-  registeredFrom?: string | null;
-  registeredTo?: string | null;
-}
 export const adminFilterClients = (filter: ClientFilter) =>
   httpPost<PagedClients | ClientRecord[]>("/api/admin/clients/filter", filter);
 
@@ -243,13 +335,34 @@ export const adminClientAudit = (clientId: number) =>
 
 export const adminReportSummary = () =>
   httpGet<Record<string, number | string>>("/api/admin/clients/reports/summary");
-export const adminRoleDistribution = () =>
-  httpGet<RoleDistributionRow[]>("/api/admin/clients/reports/role-distribution");
+
 export const adminRegistrationTrend = (months = 12) =>
-  httpGet<RegistrationTrendRow[]>(`/api/admin/clients/reports/registration-trend?months=${months}`);
-export const adminTopUploaders = () =>
-  httpGet<TopUploaderRow[]>("/api/admin/clients/reports/top-uploaders");
+  httpGet<RegistrationTrendResponse>(
+    `/api/admin/clients/reports/registration-trend?months=${months}`
+  );
+
+
+export const adminTopUploaders = (page = 0, size = 10) =>
+  httpGet<TopUploaderResponse>(
+    `/api/admin/clients/reports/top-uploaders?page=${page}&size=${size}`
+  );
+
+
 export const adminInactiveClients = () =>
   httpGet<{ count?: number; clients?: ClientRecord[] } | ClientRecord[]>(
     "/api/admin/clients/reports/inactive"
   );
+  export const adminListClientsByRole = (role: string, page = 0, size = 20) =>
+  httpGet<PagedClients | ClientRecord[]>(
+    `/api/admin/clients/by-role?role=${encodeURIComponent(role)}&page=${page}&size=${size}`
+  );
+  export const adminRoleDistribution = () =>
+  httpGet<RoleDistributionResponse>("/api/admin/clients/reports/role-distribution");
+
+  export const getClientProfile = () => httpGet<ClientProfile>("/api/client/profile");
+
+  export const updateClientProfile = (body: UpdateProfileRequest) =>
+  httpPut<ClientProfile>("/api/client/profile", body);
+
+  export const changeClientPassword = (body: ChangePasswordRequest) =>
+  httpPost<{ message: string }>("/api/client/change-password", body);
