@@ -6,7 +6,7 @@
 
 const STORAGE_KEY = "alis.apiBaseUrl";
 const ENV_DEFAULT =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8081";
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "https://alis-backend-1.onrender.com";
 
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
