@@ -233,7 +233,7 @@ export default function AdminClientsPage() {
       )}
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent className="w-full sm:max-w-md">
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
           {selected && (
             <ClientDrawer
               client={selected}
