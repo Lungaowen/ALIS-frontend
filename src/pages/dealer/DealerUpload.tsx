@@ -6,7 +6,7 @@ export default function DealerUploadPage() {
     <PortalLayout
       title="Submit Document for Analysis"
       eyebrow="Deal Maker"
-      description="Upload a deal document — ALIS will compute a Deal Readiness Score using llama-3.3-70b-versatile."
+      description="Upload a deal document and ALIS will extract text, check the rule library, and compute a readiness score."
     >
       <div className="mx-auto max-w-3xl">
         <UploadAndPoll variant="full" showReadiness />

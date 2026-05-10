@@ -33,7 +33,7 @@ export default function UserDashboardPage() {
       <div className="mt-6 rounded-lg border border-border bg-card">
         <div className="border-b border-border px-5 py-4"><h2 className="text-base font-semibold">Recent uploads</h2></div>
         {docs.length === 0 ? (
-          <EmptyState title="No documents yet" description="Upload a PDF to get started." />
+          <EmptyState title="No documents yet" description="Upload a document to get started." />
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">

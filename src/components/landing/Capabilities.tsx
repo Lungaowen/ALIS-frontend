@@ -9,12 +9,12 @@ const items = [
   {
     icon: Gavel,
     title: "Defensible verdicts",
-    body: "Risk levels, similarity scores, and AI rationale are persisted as auditable reports — never ephemeral.",
+    body: "Risk levels, similarity scores, and AI rationale are persisted as auditable reports.",
   },
   {
     icon: Layers,
     title: "Document pipeline",
-    body: "Upload triggers ingestion, embedding, rule-matching, and report generation — fully asynchronous.",
+    body: "Upload triggers text extraction, rule selection, Groq analysis, and report generation.",
   },
   {
     icon: GitBranch,
@@ -45,7 +45,7 @@ export function Capabilities() {
             A compliance engine designed for the way legal teams actually work.
           </h2>
           <p className="mt-5 text-lg text-muted-foreground">
-            Six core capabilities, one cohesive workflow — from upload to
+            Six core capabilities, one cohesive workflow - from upload to
             downloadable PDF report.
           </p>
         </div>

@@ -128,13 +128,13 @@ export default function LegalDocumentsPage() {
     <PortalLayout
       title="Document Centre"
       eyebrow="Practitioner"
-      description="Upload PDFs, manage document metadata, monitor analysis status, and review AI compliance findings."
+      description="Upload supported documents, manage metadata, monitor processing status, and review AI compliance findings."
     >
       <div className="space-y-6">
         <UploadAndPoll variant="compact" onCompleted={() => load()} />
 
         {docs.length === 0 ? (
-          <EmptyState title="No documents yet" description="Drop a PDF above to start your first compliance analysis." />
+          <EmptyState title="No documents yet" description="Drop a document above to start your first compliance analysis." />
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="overflow-x-auto">

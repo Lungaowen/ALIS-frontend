@@ -353,17 +353,14 @@ export const getResult = (documentId: number) =>
 
 // ---------- Report PDF ----------
 export async function downloadReportPdf(reportId: number, fileName?: string) {
-  const session = getStoredSession();
-  const res = await fetch(
-    `${getApiBaseUrl().replace(/\/+$/, "")}/api/client/reports/${reportId}/download`,
-    { headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {} }
+  const res = await fetchProtectedBlob(
+    `/api/reports/${reportId}/download-pdf`,
+    fileName ?? `report-${reportId}.pdf`
   );
-  if (!res.ok) throw new AlisApiError(res.status, `Download failed (${res.status})`);
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(res.blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = fileName ?? `report-${reportId}.pdf`;
+  a.download = fileName ?? res.fileName;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -379,6 +376,9 @@ export const deleteRule = (id: number) =>
   httpDelete<{ success?: boolean; message?: string }>(`/api/rules/${id}`);
 
 // ---------- Reports ----------
+export const getReportById = (reportId: number) =>
+  httpGet<ReportInfo>(`/api/reports/${reportId}`);
+
 export const listReportsForClient = (clientId: number) =>
   httpGet<ReportInfo[]>(`/api/reports/client/${clientId}`);
 

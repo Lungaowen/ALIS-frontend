@@ -2,22 +2,22 @@ const steps = [
   {
     n: "01",
     title: "Upload",
-    body: "Drop a PDF into the workspace. Multipart upload triggers the AI pipeline immediately.",
+    body: "Drop a supported document into the workspace. Upload starts the processing pipeline immediately.",
   },
   {
     n: "02",
-    title: "Analyse",
-    body: "Embeddings, rule-matching, and similarity scoring run against the indexed SA statute corpus.",
+    title: "Extract",
+    body: "ALIS extracts readable text and selects the most relevant active legal rules.",
   },
   {
     n: "03",
-    title: "Verdict",
-    body: "A persisted report lands in your inbox: risk level, citation, recommendation, explanation.",
+    title: "Analyse",
+    body: "Groq returns a structured risk level, similarity score, recommendation, and explanation.",
   },
   {
     n: "04",
-    title: "Defend",
-    body: "Download the signed PDF report — ready for board, counsel, or regulator review.",
+    title: "Report",
+    body: "Download the PDF report, ready for board, counsel, or regulator review.",
   },
 ];
 
@@ -30,7 +30,7 @@ export function HowItWorks() {
             The workflow
           </p>
           <h2 className="mt-4 text-display text-4xl font-semibold tracking-tight sm:text-5xl">
-            From PDF to defensible verdict in four moves.
+            From document upload to defensible verdict in four moves.
           </h2>
         </div>
 

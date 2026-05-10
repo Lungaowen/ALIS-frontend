@@ -11,6 +11,14 @@ import {
 } from "@/lib/alis";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  DOCUMENT_ACCEPT,
+  DOCUMENT_FORMAT_LABEL,
+  DOCUMENT_PROCESSING_STEPS,
+  MAX_DOCUMENT_SIZE_MB,
+  formatFileSize,
+  validateDocumentFile,
+} from "@/lib/document-processing";
 
 type Step = "idle" | "uploading" | "uploaded" | "processing" | "ready" | "failed";
 
@@ -70,8 +78,9 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
   }, [onCompleted, stopPolling]);
 
   async function handleFile(f: File) {
-    if (f.type !== "application/pdf") {
-      toast.error("Please upload a PDF file");
+    const validationError = validateDocumentFile(f);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     setFile(f);
@@ -109,7 +118,7 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
     : 0;
   const verdict = readiness >= 70 ? "READY TO PROCEED" : readiness >= 40 ? "REVIEW REQUIRED" : "HIGH RISK - DO NOT PROCEED";
   const verdictTone = readiness >= 70 ? "text-accent" : readiness >= 40 ? "text-gold" : "text-destructive";
-  const documentsPath = role === "DEAL_MAKER" ? "/dealer/deals" : "/legal/documents";
+  const documentsPath = role === "DEAL_MAKER" ? "/dealer/deals" : role === "USER" ? "/user/documents" : "/legal/documents";
 
   return (
     <div className="space-y-6">
@@ -131,12 +140,14 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
       >
         <UploadCloud className="h-10 w-10 text-muted-foreground" strokeWidth={1.5} />
         <p className="mt-3 text-base font-medium">
-          {file ? file.name : "Drop a PDF here or click to browse"}
+          {file ? file.name : "Drop a document here or click to browse"}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">PDF only • 50 MB max</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {DOCUMENT_FORMAT_LABEL} - {MAX_DOCUMENT_SIZE_MB} MB max
+        </p>
         <input
           type="file"
-          accept="application/pdf"
+          accept={DOCUMENT_ACCEPT}
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -148,29 +159,45 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
       {step === "uploading" && (
         <div className="space-y-2 rounded-lg border border-border bg-card p-4">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Uploading…</span>
+            <span>Uploading...</span>
             <span>{progress}%</span>
           </div>
           <ProgressBar value={progress} />
+          {file && (
+            <p className="text-xs text-muted-foreground">
+              {formatFileSize(file.size)} queued for text extraction and AI analysis.
+            </p>
+          )}
         </div>
       )}
 
       {(step === "uploaded" || step === "processing" || step === "ready" || step === "failed") && (
         <div className="rounded-lg border border-border bg-card p-5">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Analysis pipeline
+            Document processing pipeline
           </h3>
           <ol className="mt-4 grid gap-3 sm:grid-cols-3">
             <Stepper step={1} label="Uploaded" state="done" />
             <Stepper
-              step={2} label="Processing"
+              step={2} label="Extracting & matching"
               state={step === "processing" ? "current" : step === "ready" ? "done" : step === "failed" ? "failed" : "pending"}
             />
             <Stepper
-              step={3} label="Report Ready"
+              step={3} label="AI report ready"
               state={step === "ready" ? "done" : step === "failed" ? "failed" : "pending"}
             />
           </ol>
+          <ul className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            {DOCUMENT_PROCESSING_STEPS.map((item) => (
+              <li key={item.title} className="flex gap-2">
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                <span>
+                  <span className="font-medium text-foreground">{item.title}: </span>
+                  {item.description}
+                </span>
+              </li>
+            ))}
+          </ul>
           {status?.message && (
             <p className="mt-4 text-xs text-muted-foreground">{status.message}</p>
           )}
@@ -182,7 +209,7 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-mono text-[10px] uppercase tracking-[0.2em] text-accent">
-                <Sparkles className="mr-1 inline h-3 w-3" /> AI Result
+                <Sparkles className="mr-1 inline h-3 w-3" /> AI Compliance Result
               </p>
               <h3 className="mt-1 text-display text-xl font-semibold">{result.documentTitle}</h3>
               <div className="mt-2 flex items-center gap-2">
@@ -213,10 +240,16 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
             </div>
           </div>
 
-          <blockquote className="mt-5 rounded-md border-l-4 border-accent bg-card p-4 text-sm">
-            <p className="font-medium text-foreground">AI Recommendation</p>
-            <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{result.aiRecommendation}</p>
-          </blockquote>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <blockquote className="rounded-md border-l-4 border-accent bg-card p-4 text-sm">
+              <p className="font-medium text-foreground">AI Recommendation</p>
+              <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{result.aiRecommendation}</p>
+            </blockquote>
+            <blockquote className="rounded-md border-l-4 border-primary bg-card p-4 text-sm">
+              <p className="font-medium text-foreground">AI Explanation</p>
+              <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{result.aiExplanation}</p>
+            </blockquote>
+          </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Button onClick={() => downloadReportPdf(result.reportId, `${result.documentTitle}.pdf`)}>
@@ -232,7 +265,7 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
         <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4" />
           <div>
-            <p className="font-medium">Analysis unavailable — try again.</p>
+            <p className="font-medium">Analysis unavailable - try again.</p>
             {docId && <Button size="sm" variant="outline" className="mt-2" onClick={reanalyze}>Retry analysis</Button>}
           </div>
         </div>

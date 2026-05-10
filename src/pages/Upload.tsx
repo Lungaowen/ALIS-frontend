@@ -8,6 +8,14 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { getStatus, uploadDocument, type ComplianceStatus } from "@/lib/alis";
 import { StatusBadge } from "@/components/app/StatusBadges";
+import {
+  DOCUMENT_ACCEPT,
+  DOCUMENT_FORMAT_LABEL,
+  DOCUMENT_PROCESSING_STEPS,
+  MAX_DOCUMENT_SIZE_MB,
+  formatFileSize,
+  validateDocumentFile,
+} from "@/lib/document-processing";
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -20,11 +28,11 @@ export default function UploadPage() {
   const qc = useQueryClient();
 
   const upload = useMutation({
-    mutationFn: (f: File) => uploadDocument(f),
+    mutationFn: (f: File) => uploadDocument(f, setProgress),
     onSuccess: (res) => {
-      toast.success("Uploaded — analysis started");
+      toast.success("Uploaded - analysis started");
       setDocId(res.documentId);
-      setProgress(20);
+      setProgress((p) => Math.max(p, 25));
       qc.invalidateQueries({ queryKey: ["documents"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -57,12 +65,21 @@ export default function UploadPage() {
     };
   }, [docId]);
 
+  const selectFile = useCallback((f: File) => {
+    const validationError = validateDocumentFile(f);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    setFile(f);
+  }, []);
+
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDrag(false);
     const f = e.dataTransfer.files?.[0];
-    if (f) setFile(f);
-  }, []);
+    if (f) selectFile(f);
+  }, [selectFile]);
 
   const reset = () => {
     setFile(null);
@@ -77,7 +94,7 @@ export default function UploadPage() {
     <AppShell
       eyebrow="Upload & analyze"
       title="Run a compliance analysis"
-      description="Drop a PDF. ALIS ingests, embeds, and scores it against the active rule corpus."
+      description="Upload a supported document. ALIS extracts text, matches active rules, and produces a Groq AI compliance report."
     >
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         {/* Drop zone */}
@@ -99,20 +116,23 @@ export default function UploadPage() {
               <UploadCloud className="h-6 w-6" />
             </span>
             <h3 className="mt-5 text-display text-2xl font-semibold tracking-tight">
-              {file ? file.name : "Drop your PDF here"}
+              {file ? file.name : "Drop your document here"}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {file
-                ? `${(file.size / 1024 / 1024).toFixed(2)} MB · ready to upload`
-                : "Or click below to choose a file from your computer."}
+                ? `${formatFileSize(file.size)} - ready to upload`
+                : `${DOCUMENT_FORMAT_LABEL} supported, up to ${MAX_DOCUMENT_SIZE_MB} MB.`}
             </p>
 
             <input
               ref={inputRef}
               type="file"
-              accept="application/pdf,.pdf"
+              accept={DOCUMENT_ACCEPT}
               className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const nextFile = e.target.files?.[0];
+                if (nextFile) selectFile(nextFile);
+              }}
             />
 
             <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -151,13 +171,21 @@ export default function UploadPage() {
           </div>
 
           <ul className="mt-6 space-y-3 text-sm">
-            <Step done={!!docId} label="Document received" />
-            <Step done={!!status} label="Pipeline started" />
-            <Step
-              done={!!status && (status.documentStatus ?? "").toUpperCase() !== "PENDING"}
-              label="Embeddings & rule match"
-            />
-            <Step done={!!ready} label="Verdict generated" />
+            {DOCUMENT_PROCESSING_STEPS.map((stage, index) => (
+              <Step
+                key={stage.title}
+                done={
+                  index === 0
+                    ? !!docId
+                    : index === 1
+                      ? !!status
+                      : index === 2
+                        ? !!status && (status.documentStatus ?? "").toUpperCase() !== "PENDING"
+                        : !!ready
+                }
+                label={stage.title}
+              />
+            ))}
           </ul>
 
           {status && (

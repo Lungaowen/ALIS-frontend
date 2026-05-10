@@ -25,6 +25,7 @@ import {
   adminFilterClients,
   adminGetClient,
   adminListClients,
+  adminListClientsByRole,
   adminUpdateClient,
   type ClientFilter,
   type ClientRecord,
@@ -70,7 +71,7 @@ export default function AdminClientsPage() {
   const [page, setPage] = useState(0);
   const [size] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
-  const [search, setSearch] = useState("");
+  const [clientIdSearch, setClientIdSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "ALL">("ALL");
   const [from, setFrom] = useState<Date | undefined>();
   const [to, setTo] = useState<Date | undefined>();
@@ -82,16 +83,33 @@ export default function AdminClientsPage() {
   const fetchPage = useCallback(async () => {
     setLoading(true);
     try {
-      const filter: ClientFilter = {};
-      if (search.trim()) filter.searchQuery = search.trim();
-      if (roleFilter !== "ALL") filter.role = roleFilter;
-      if (from) filter.registeredFrom = formatDateTime(from);
-      if (to) filter.registeredTo = formatDateTime(to, true);
+      const clientIdQuery = clientIdSearch.trim();
+      const registeredFrom = from ? formatDateTime(from) : undefined;
+      const registeredTo = to ? formatDateTime(to, true) : undefined;
+      const hasRoleFilter = roleFilter !== "ALL";
+      const hasOtherFilters = !!(registeredFrom || registeredTo);
 
-      const hasFilter = !!(filter.searchQuery || filter.role || filter.registeredFrom || filter.registeredTo);
-      const res = hasFilter
-        ? await adminFilterClients(filter, page, size)
-        : await adminListClients(page, size);
+      let res;
+      if (clientIdQuery) {
+        const clientId = Number(clientIdQuery);
+        if (!Number.isInteger(clientId) || clientId <= 0) {
+          setClients([]);
+          setTotalPages(1);
+          return;
+        }
+        res = [await adminGetClient(clientId)];
+      } else if (hasRoleFilter && !hasOtherFilters) {
+        res = await adminListClientsByRole(roleFilter, page, size);
+      } else if (hasRoleFilter || hasOtherFilters) {
+        const filter: ClientFilter = {
+          role: hasRoleFilter ? roleFilter : undefined,
+          registeredFrom,
+          registeredTo,
+        };
+        res = await adminFilterClients(filter, page, size);
+      } else {
+        res = await adminListClients(page, size);
+      }
 
       setClients(unwrap(res));
       setTotalPages(extractTotalPages(res));
@@ -102,7 +120,7 @@ export default function AdminClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [from, page, roleFilter, search, size, to]);
+  }, [clientIdSearch, from, page, roleFilter, size, to]);
 
   useEffect(() => {
     fetchPage();
@@ -110,10 +128,10 @@ export default function AdminClientsPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [search, roleFilter, from, to]);
+  }, [clientIdSearch, roleFilter, from, to]);
 
   const clearFilters = () => {
-    setSearch("");
+    setClientIdSearch("");
     setRoleFilter("ALL");
     setFrom(undefined);
     setTo(undefined);
@@ -145,9 +163,11 @@ export default function AdminClientsPage() {
     >
       <div className="mb-5 grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-5">
         <Input
-          placeholder="Search by name or email"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          placeholder="Search by client ID"
+          value={clientIdSearch}
+          onChange={(e) => setClientIdSearch(e.target.value.replace(/\D/g, ""))}
         />
         <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | "ALL")}>
           <SelectTrigger><SelectValue /></SelectTrigger>

@@ -15,7 +15,7 @@ export default function UserDocumentsPage() {
   return (
     <PortalLayout title="My Documents" eyebrow="My account" description="Every document you've uploaded.">
       {docs.length === 0 ? (
-        <EmptyState title="No documents yet" description="Upload a PDF to see it here." />
+        <EmptyState title="No documents yet" description="Upload a document to see it here." />
       ) : (
         <div className="rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
