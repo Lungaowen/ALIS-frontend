@@ -3,11 +3,15 @@ import { Scale, LogOut } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { ApiBaseDialog } from "@/components/ApiBaseDialog";
+import { ROLE_HOME } from "@/lib/nav";
 
 export function SiteHeader() {
   const { isAuthenticated, logout, session } = useAuth();
   const location = useLocation();
-  const onApp = location.pathname.startsWith("/dashboard");
+  const onApp = ["/admin", "/legal", "/dealer", "/profile"].some((path) =>
+    location.pathname.startsWith(path)
+  );
+  const dashboardPath = session?.role ? ROLE_HOME[session.role] : "/login";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 glass">
@@ -42,7 +46,7 @@ export function SiteHeader() {
                 {session?.fullName}
               </span>
               <Button asChild variant="ghost" size="sm">
-                <Link to="/dashboard">Dashboard</Link>
+                <Link to={dashboardPath}>Dashboard</Link>
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 <LogOut className="mr-1.5 h-3.5 w-3.5" /> Sign out

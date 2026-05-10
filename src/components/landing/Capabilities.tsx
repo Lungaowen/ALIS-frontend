@@ -24,7 +24,7 @@ const items = [
   {
     icon: Lock,
     title: "Role-aware access",
-    body: "ADMIN, USER, LEGAL_PRACTITIONER, and DEAL_MAKER each see exactly what they're entitled to.",
+    body: "Admin, legal practitioner, and deal maker workspaces each expose the actions their role is entitled to.",
   },
   {
     icon: Sparkles,

@@ -1,5 +1,5 @@
 // Typed ALIS backend client (axios). All endpoints from the API brief.
-import { httpGet, httpPost, httpPut, httpDelete, http, AlisApiError } from "./http";
+import { httpGet, httpPost, httpPut, httpDelete, httpPatch, http, AlisApiError } from "./http";
 import { getApiBaseUrl } from "./api";
 import { getStoredSession } from "./auth";
 
@@ -101,8 +101,12 @@ export interface ClientRecord {
   createdAt?: string;          // ← backend sends this
   registeredAt?: string;       // keep for backward compatibility (other endpoints might use it)
   documentCount?: number;      // still optional; the /by-role endpoint doesn't send it
+  documentsUploaded?: number;
   username?: string;           // backend also includes this
-  companyName?: string;
+  companyName?: string | null;
+  dealSpecialty?: string | null;
+  barNumber?: string | null;
+  lawFirm?: string | null;
 }
 
 // Correctly matches the real GET /api/admin/dashboard response
@@ -237,16 +241,42 @@ export interface ClientProfile {
   username?: string;
   role?: string;
   createdAt?: string;
+  active?: boolean;
+  deactivatedAt?: string | null;
+  barNumber?: string | null;
+  lawFirm?: string | null;
+  companyName?: string | null;
+  dealSpecialty?: string | null;
 }
 export interface UpdateProfileRequest {
   fullName?: string;
   username?: string;
   currentPassword?: string;  // added
   newPassword?: string;      // added
+  barNumber?: string | null;
+  lawFirm?: string | null;
+  companyName?: string | null;
+  dealSpecialty?: string | null;
 }
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
+}
+
+export interface SpecialistAccountInput {
+  fullName: string;
+  email: string;
+  password: string;
+}
+
+export interface LegalPractitionerInput extends SpecialistAccountInput {
+  barNumber: string;
+  lawFirm: string;
+}
+
+export interface DealMakerInput extends SpecialistAccountInput {
+  companyName: string;
+  dealSpecialty: string;
 }
 
 // ---------- Documents ----------
@@ -254,6 +284,47 @@ export const listDocuments = () => httpGet<DocumentItem[]>("/api/client/document
 export const getDocument = (id: number) => httpGet<DocumentItem>(`/api/client/documents/${id}`);
 export const getDocumentReports = (id: number) =>
   httpGet<ReportInfo[]>(`/api/client/documents/${id}/reports`);
+export const updateDocument = (id: number, title: string) =>
+  httpPatch<DocumentItem>(`/api/client/documents/${id}`, { title });
+export const deleteDocument = (id: number) =>
+  httpDelete<{ message?: string }>(`/api/client/documents/${id}`);
+
+function getDownloadFileName(res: Response, fallback: string): string {
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  return match?.[1] ?? fallback;
+}
+
+async function fetchProtectedBlob(path: string, fallbackName: string): Promise<{ blob: Blob; fileName: string }> {
+  const session = getStoredSession();
+  const res = await fetch(`${getApiBaseUrl().replace(/\/+$/, "")}${path}`, {
+    headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {},
+  });
+  if (!res.ok) throw new AlisApiError(res.status, `Download failed (${res.status})`);
+  return {
+    blob: await res.blob(),
+    fileName: getDownloadFileName(res, fallbackName),
+  };
+}
+
+export async function viewDocumentFile(documentId: number) {
+  const { blob } = await fetchProtectedBlob(`/api/client/documents/${documentId}/view`, `document-${documentId}.pdf`);
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function downloadDocumentFile(documentId: number, fileName?: string) {
+  const res = await fetchProtectedBlob(`/api/client/documents/${documentId}/download`, fileName ?? `document-${documentId}.pdf`);
+  const url = URL.createObjectURL(res.blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName ?? res.fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export async function uploadDocument(
   file: File,
@@ -314,11 +385,16 @@ export const listReportsForClient = (clientId: number) =>
 // ---------- Admin ----------
 export const adminDashboard = () => httpGet<AdminDashboard>("/api/admin/dashboard");
 
-export const adminListClients = (page = 0, size = 20) =>
-  httpGet<PagedClients | ClientRecord[]>(`/api/admin/clients?page=${page}&size=${size}`);
+export const adminListClients = (page = 0, size = 20, sort = "createdAt", dir = "desc") =>
+  httpGet<PagedClients | ClientRecord[]>(
+    `/api/admin/clients?page=${page}&size=${size}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`
+  );
 
-export const adminFilterClients = (filter: ClientFilter) =>
-  httpPost<PagedClients | ClientRecord[]>("/api/admin/clients/filter", filter);
+export const adminFilterClients = (filter: ClientFilter, page = 0, size = 20) =>
+  httpPost<PagedClients | ClientRecord[]>(
+    `/api/admin/clients/filter?page=${page}&size=${size}`,
+    filter
+  );
 
 export const adminGetClient = (id: number) => httpGet<ClientRecord>(`/api/admin/clients/${id}`);
 export const adminUpdateClient = (
@@ -356,6 +432,12 @@ export const adminInactiveClients = () =>
   httpGet<PagedClients | ClientRecord[]>(
     `/api/admin/clients/by-role?role=${encodeURIComponent(role)}&page=${page}&size=${size}`
   );
+  export const adminListClientsByDate = (from: string, to: string, page = 0, size = 20) =>
+  httpGet<PagedClients | ClientRecord[]>(
+    `/api/admin/clients/by-date?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&page=${page}&size=${size}`
+  );
+  export const adminDocumentCount = (clientId: number) =>
+  httpGet<number>(`/api/admin/clients/${clientId}/document-count`);
   export const adminRoleDistribution = () =>
   httpGet<RoleDistributionResponse>("/api/admin/clients/reports/role-distribution");
 
@@ -366,3 +448,15 @@ export const adminInactiveClients = () =>
 
   export const changeClientPassword = (body: ChangePasswordRequest) =>
   httpPost<{ message: string }>("/api/client/change-password", body);
+
+  export const deactivateClientProfile = () =>
+  httpPatch<ClientProfile>("/api/client/profile/deactivate");
+
+  export const deleteClientProfile = () =>
+  httpDelete<{ message: string }>("/api/client/profile");
+
+  export const createLegalPractitioner = (body: LegalPractitionerInput) =>
+  httpPost<ClientRecord>("/api/legal-practitioners", body);
+
+  export const createDealMaker = (body: DealMakerInput) =>
+  httpPost<ClientRecord>("/api/dealmakers", body);

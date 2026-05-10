@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, ChevronLeft, ChevronRight, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { CalendarIcon, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
 import { PortalLayout } from "@/components/app/PortalLayout";
 import { Spinner, EmptyState } from "@/components/app/Primitives";
-import { RiskBadge } from "@/components/app/StatusBadges";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -23,12 +21,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   adminDeleteClient,
+  adminDocumentCount,
+  adminFilterClients,
+  adminGetClient,
   adminListClients,
-  adminListClientsByRole,
   adminUpdateClient,
-  getResult,
+  type ClientFilter,
   type ClientRecord,
-  type RiskLevel,
 } from "@/lib/alis";
 import type { Role } from "@/lib/auth";
 import { toast } from "sonner";
@@ -36,10 +35,10 @@ import { cn } from "@/lib/utils";
 
 const ROLES: { value: Role | "ALL"; label: string }[] = [
   { value: "ALL", label: "All roles" },
-  { value: "USER", label: "User" },
   { value: "LEGAL_PRACTITIONER", label: "Legal Practitioner" },
   { value: "DEAL_MAKER", label: "Deal Maker" },
   { value: "ADMIN", label: "Administrator" },
+  { value: "USER", label: "Legacy User" },
 ];
 
 function unwrap(res: unknown): ClientRecord[] {
@@ -54,77 +53,48 @@ function extractTotalPages(res: unknown): number {
   return tp && tp > 0 ? tp : 1;
 }
 
+function formatDateTime(date: Date, endOfDay = false) {
+  const d = new Date(date);
+  d.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function documentTotal(c: ClientRecord) {
+  return c.documentsUploaded ?? c.documentCount;
+}
+
 export default function AdminClientsPage() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [size] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
-
-  // Filter state
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "ALL">("ALL");
   const [from, setFrom] = useState<Date | undefined>();
   const [to, setTo] = useState<Date | undefined>();
-
-  // Client‑side filtering active only when search or date range is used
-  const [useClientFilter, setUseClientFilter] = useState(false);
-
-  // Drawer & delete
   const [selected, setSelected] = useState<ClientRecord | null>(null);
   const [editing, setEditing] = useState(false);
+  const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ClientRecord | null>(null);
-  const [riskMap, setRiskMap] = useState<Record<number, RiskLevel | "NONE" | "LOADING">>({});
 
-  // ---------- Data fetching ----------
-  const fetchPage = useCallback(async (pageNum: number) => {
+  const fetchPage = useCallback(async () => {
     setLoading(true);
     try {
-      let res;
-      if (useClientFilter) {
-        // When search/date are active, fetch all (or as many as possible) to filter in memory
-        if (roleFilter === "ALL") {
-          res = await adminListClients(0, 9999); // get all clients
-        } else {
-          res = await adminListClientsByRole(roleFilter, 0, 9999);
-        }
-        const all = unwrap(res);
-        // Apply client‑side filters
-        let filtered = all;
-        if (search.trim()) {
-          const q = search.toLowerCase();
-          filtered = filtered.filter(
-            (c) =>
-              c.fullName.toLowerCase().includes(q) ||
-              c.email.toLowerCase().includes(q)
-          );
-        }
-        if (from) {
-          const fromDate = new Date(from);
-          fromDate.setHours(0, 0, 0, 0);
-          filtered = filtered.filter(
-            (c) => c.registeredAt && new Date(c.registeredAt) >= fromDate
-          );
-        }
-        if (to) {
-          const toDate = new Date(to);
-          toDate.setHours(23, 59, 59, 999);
-          filtered = filtered.filter(
-            (c) => c.registeredAt && new Date(c.registeredAt) <= toDate
-          );
-        }
-        setClients(filtered);
-        setTotalPages(1); // single page for local filtering
-      } else {
-        // Server‑side pagination (no search/date active)
-        if (roleFilter === "ALL") {
-          res = await adminListClients(pageNum, size);
-        } else {
-          res = await adminListClientsByRole(roleFilter, pageNum, size);
-        }
-        setClients(unwrap(res));
-        setTotalPages(extractTotalPages(res));
-      }
+      const filter: ClientFilter = {};
+      if (search.trim()) filter.searchQuery = search.trim();
+      if (roleFilter !== "ALL") filter.role = roleFilter;
+      if (from) filter.registeredFrom = formatDateTime(from);
+      if (to) filter.registeredTo = formatDateTime(to, true);
+
+      const hasFilter = !!(filter.searchQuery || filter.role || filter.registeredFrom || filter.registeredTo);
+      const res = hasFilter
+        ? await adminFilterClients(filter, page, size)
+        : await adminListClients(page, size);
+
+      setClients(unwrap(res));
+      setTotalPages(extractTotalPages(res));
     } catch (e) {
       toast.error((e as Error)?.message ?? "Failed to load clients");
       setClients([]);
@@ -132,22 +102,15 @@ export default function AdminClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [roleFilter, useClientFilter, search, from, to, size]);
+  }, [from, page, roleFilter, search, size, to]);
 
-  // Initial load & when page or filters change
   useEffect(() => {
-    fetchPage(page);
-  }, [page, fetchPage]);
+    fetchPage();
+  }, [fetchPage]);
 
-  // Determine if we need client‑side filtering
-  useEffect(() => {
-    setUseClientFilter(!!(search.trim() || from || to));
-  }, [search, from, to]);
-
-  // Reset to page 0 whenever filters change
   useEffect(() => {
     setPage(0);
-  }, [roleFilter, search, from, to, useClientFilter]);
+  }, [search, roleFilter, from, to]);
 
   const clearFilters = () => {
     setSearch("");
@@ -156,14 +119,21 @@ export default function AdminClientsPage() {
     setTo(undefined);
   };
 
-  // ---------- Risk helper ----------
-  async function fetchRisk(c: ClientRecord) {
-    setRiskMap((m) => ({ ...m, [c.clientId]: "LOADING" }));
+  async function openClient(client: ClientRecord) {
+    setDetailLoadingId(client.clientId);
     try {
-      const r = await getResult(c.clientId);
-      setRiskMap((m) => ({ ...m, [c.clientId]: r.riskLevel ?? "NONE" }));
-    } catch {
-      setRiskMap((m) => ({ ...m, [c.clientId]: "NONE" }));
+      const detail = await adminGetClient(client.clientId);
+      let documentsUploaded = detail.documentsUploaded ?? detail.documentCount;
+      if (documentsUploaded == null) {
+        documentsUploaded = await adminDocumentCount(client.clientId).catch(() => undefined);
+      }
+      const hydrated = { ...client, ...detail, documentsUploaded };
+      setSelected(hydrated);
+      setEditing(false);
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Could not load client detail");
+    } finally {
+      setDetailLoadingId(null);
     }
   }
 
@@ -171,9 +141,8 @@ export default function AdminClientsPage() {
     <PortalLayout
       title="Client Management"
       eyebrow="Administration"
-      description="Search, filter, edit, and audit every client in the platform."
+      description="Search, filter, edit, and audit platform accounts."
     >
-      {/* Filter bar – simplified: no separate apply button; filters auto‑refresh */}
       <div className="mb-5 grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-5">
         <Input
           placeholder="Search by name or email"
@@ -192,86 +161,77 @@ export default function AdminClientsPage() {
       </div>
 
       {loading ? (
-        <Spinner label="Loading clients…" />
+        <Spinner label="Loading clients..." />
       ) : clients.length === 0 ? (
-        <EmptyState title="No clients found" description="Adjust your filters or invite new users." />
+        <EmptyState title="No clients found" description="Adjust your filters and try again." />
       ) : (
-        <div className="rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left">ID</th>
-                <th className="px-4 py-3 text-left">Full Name</th>
-                <th className="px-4 py-3 text-left">Email</th>
-                <th className="px-4 py-3 text-left">Role</th>
-                <th className="px-4 py-3 text-left">Registered</th>
-                <th className="px-4 py-3 text-left">Documents</th>
-                <th className="px-4 py-3 text-left">AI Risk</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((c) => {
-                const risk = riskMap[c.clientId];
-                return (
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left">ID</th>
+                  <th className="px-4 py-3 text-left">Full Name</th>
+                  <th className="px-4 py-3 text-left">Email</th>
+                  <th className="px-4 py-3 text-left">Role</th>
+                  <th className="px-4 py-3 text-left">Registered</th>
+                  <th className="px-4 py-3 text-left">Documents</th>
+                  <th className="px-4 py-3 text-left">Specialist Detail</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((c) => (
                   <tr key={c.clientId} className="border-t border-border">
                     <td className="px-4 py-3 text-mono text-xs text-muted-foreground">#{c.clientId}</td>
                     <td className="px-4 py-3 font-medium">{c.fullName}</td>
                     <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className="text-mono text-[10px] uppercase tracking-[0.16em]">
-                        {c.role.replace("_", " ")}
+                        {String(c.role).replace(/_/g, " ")}
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {/* prefer createdAt, fallback to registeredAt */}
                       {(c.createdAt || c.registeredAt)
                         ? new Date(c.createdAt ?? c.registeredAt!).toLocaleDateString()
-                        : "—"}
+                        : "-"}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.documentCount != null ? c.documentCount : "—"}</td>
-                    <td className="px-4 py-3">
-                      {risk === "LOADING" ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                      ) : risk && risk !== "NONE" ? (
-                        <RiskBadge level={risk as RiskLevel} />
-                      ) : (
-                        <Button size="sm" variant="ghost" onClick={() => fetchRisk(c)}>
-                          <Sparkles className="mr-1 h-3 w-3" /> Risk Summary
-                        </Button>
-                      )}
+                    <td className="px-4 py-3 text-muted-foreground">{documentTotal(c) ?? "-"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {c.role === "DEAL_MAKER"
+                        ? c.companyName ?? c.dealSpecialty ?? "-"
+                        : c.role === "LEGAL_PRACTITIONER"
+                        ? c.lawFirm ?? c.barNumber ?? "-"
+                        : "-"}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button size="sm" variant="outline" onClick={() => { setSelected(c); setEditing(false); }}>
+                      <Button size="sm" variant="outline" onClick={() => openClient(c)} disabled={detailLoadingId === c.clientId}>
+                        {detailLoadingId === c.clientId && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                         View
                       </Button>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-          {/* Pagination – only show when using server‑side pagination */}
-          {!useClientFilter && (
-            <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <span className="text-xs text-muted-foreground">
-                Page {page + 1} of {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-                  <ChevronLeft className="h-3.5 w-3.5" /> Prev
-                </Button>
-                <Button size="sm" variant="outline" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                  Next <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+          <div className="flex items-center justify-between border-t border-border px-4 py-3">
+            <span className="text-xs text-muted-foreground">
+              Page {page + 1} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+                <ChevronLeft className="h-3.5 w-3.5" /> Prev
+              </Button>
+              <Button size="sm" variant="outline" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                Next <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* Drawer */}
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="w-full sm:max-w-md">
           {selected && (
@@ -280,7 +240,7 @@ export default function AdminClientsPage() {
               editing={editing}
               setEditing={setEditing}
               onSaved={(updated) => {
-                setClients((arr) => arr.map((c) => (c.clientId === updated.clientId ? updated : c)));
+                setClients((arr) => arr.map((c) => (c.clientId === updated.clientId ? { ...c, ...updated } : c)));
                 setSelected(updated);
                 setEditing(false);
               }}
@@ -295,7 +255,7 @@ export default function AdminClientsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete client?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes <strong>{confirmDelete?.fullName}</strong> and all related records.
+              This permanently removes <strong>{confirmDelete?.fullName}</strong> and related records.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -343,25 +303,49 @@ function DatePickerField({ label, value, onChange }: { label: string; value?: Da
 function ClientDrawer({
   client, editing, setEditing, onSaved, onDelete,
 }: {
-  client: ClientRecord; editing: boolean; setEditing: (b: boolean) => void;
-  onSaved: (c: ClientRecord) => void; onDelete: () => void;
+  client: ClientRecord;
+  editing: boolean;
+  setEditing: (b: boolean) => void;
+  onSaved: (c: ClientRecord) => void;
+  onDelete: () => void;
 }) {
   const [fullName, setFullName] = useState(client.fullName);
   const [email, setEmail] = useState(client.email);
+  const [username, setUsername] = useState(client.username ?? "");
   const [role, setRole] = useState<Role>(client.role);
-  const [active, setActive] = useState(client.active ?? true);
+  const [barNumber, setBarNumber] = useState(client.barNumber ?? "");
+  const [lawFirm, setLawFirm] = useState(client.lawFirm ?? "");
+  const [companyName, setCompanyName] = useState(client.companyName ?? "");
+  const [dealSpecialty, setDealSpecialty] = useState(client.dealSpecialty ?? "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setFullName(client.fullName); setEmail(client.email); setRole(client.role); setActive(client.active ?? true);
+    setFullName(client.fullName);
+    setEmail(client.email);
+    setUsername(client.username ?? "");
+    setRole(client.role);
+    setBarNumber(client.barNumber ?? "");
+    setLawFirm(client.lawFirm ?? "");
+    setCompanyName(client.companyName ?? "");
+    setDealSpecialty(client.dealSpecialty ?? "");
   }, [client]);
 
   async function save() {
     setSaving(true);
     try {
-      const updated = await adminUpdateClient(client.clientId, { fullName, email, role, active });
+      const body = {
+        fullName,
+        email,
+        username,
+        role,
+        barNumber: role === "LEGAL_PRACTITIONER" ? barNumber || null : null,
+        lawFirm: role === "LEGAL_PRACTITIONER" ? lawFirm || null : null,
+        companyName: role === "DEAL_MAKER" ? companyName || null : null,
+        dealSpecialty: role === "DEAL_MAKER" ? dealSpecialty || null : null,
+      };
+      const updated = await adminUpdateClient(client.clientId, body as Partial<ClientRecord>);
       toast.success("Client updated");
-      onSaved({ ...client, ...updated, fullName, email, role, active });
+      onSaved({ ...client, ...updated, ...body });
     } catch (e) {
       toast.error((e as Error)?.message ?? "Update failed");
     } finally {
@@ -373,7 +357,7 @@ function ClientDrawer({
     <>
       <SheetHeader>
         <SheetTitle>{client.fullName}</SheetTitle>
-        <SheetDescription>Client ID #{client.clientId} • {client.email}</SheetDescription>
+        <SheetDescription>Client ID #{client.clientId} - {client.email}</SheetDescription>
       </SheetHeader>
 
       <div className="mt-6 space-y-4">
@@ -383,30 +367,52 @@ function ClientDrawer({
         <Field label="Email">
           {editing ? <Input value={email} onChange={(e) => setEmail(e.target.value)} /> : <p>{email}</p>}
         </Field>
+        <Field label="Username">
+          {editing ? <Input value={username} onChange={(e) => setUsername(e.target.value)} /> : <p>{username || "-"}</p>}
+        </Field>
         <Field label="Role">
           {editing ? (
             <Select value={role} onValueChange={(v) => setRole(v as Role)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="USER">User</SelectItem>
                 <SelectItem value="LEGAL_PRACTITIONER">Legal Practitioner</SelectItem>
                 <SelectItem value="DEAL_MAKER">Deal Maker</SelectItem>
                 <SelectItem value="ADMIN">Administrator</SelectItem>
+                <SelectItem value="USER">Legacy User</SelectItem>
               </SelectContent>
             </Select>
-          ) : <Badge variant="outline">{role.replace("_", " ")}</Badge>}
-        </Field>
-        <Field label="Active">
-          <div className="flex items-center gap-2">
-            <Switch checked={active} onCheckedChange={setActive} disabled={!editing} />
-            <span className="text-sm text-muted-foreground">{active ? "Account enabled" : "Disabled"}</span>
-          </div>
+          ) : <Badge variant="outline">{String(role).replace(/_/g, " ")}</Badge>}
         </Field>
         <Field label="Registered">
           <p className="text-sm text-muted-foreground">
-            {client.registeredAt ? new Date(client.registeredAt).toLocaleString() : "—"}
+            {(client.createdAt || client.registeredAt) ? new Date(client.createdAt ?? client.registeredAt!).toLocaleString() : "-"}
           </p>
         </Field>
+        <Field label="Documents Uploaded">
+          <p>{documentTotal(client) ?? "-"}</p>
+        </Field>
+
+        {role === "LEGAL_PRACTITIONER" && (
+          <>
+            <Field label="Bar Number">
+              {editing ? <Input value={barNumber} onChange={(e) => setBarNumber(e.target.value)} /> : <p>{barNumber || "-"}</p>}
+            </Field>
+            <Field label="Law Firm">
+              {editing ? <Input value={lawFirm} onChange={(e) => setLawFirm(e.target.value)} /> : <p>{lawFirm || "-"}</p>}
+            </Field>
+          </>
+        )}
+
+        {role === "DEAL_MAKER" && (
+          <>
+            <Field label="Company Name">
+              {editing ? <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} /> : <p>{companyName || "-"}</p>}
+            </Field>
+            <Field label="Deal Specialty">
+              {editing ? <Input value={dealSpecialty} onChange={(e) => setDealSpecialty(e.target.value)} /> : <p>{dealSpecialty || "-"}</p>}
+            </Field>
+          </>
+        )}
       </div>
 
       <div className="mt-8 flex flex-wrap gap-2">

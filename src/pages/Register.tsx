@@ -16,7 +16,7 @@ import { register } from "@/lib/auth";
 import { useAuth } from "@/context/AuthContext";
 import { ROLE_HOME } from "@/lib/nav";
 import { toast } from "sonner";
-import type { Role } from "@/lib/auth";
+import type { RegistrationRole } from "@/lib/auth";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -25,7 +25,7 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("DEAL_MAKER"); // default to Deal Maker
+  const [role, setRole] = useState<RegistrationRole>("DEAL_MAKER");
   const [companyName, setCompanyName] = useState("");
   const [dealSpecialty, setDealSpecialty] = useState("");
   const [barNumber, setBarNumber] = useState("");
@@ -57,7 +57,7 @@ export default function RegisterPage() {
 
       // Auto‑login and redirect to the role’s dashboard
       const session = await login(email, password);
-      const home = ROLE_HOME[session.role] ?? "/user/dashboard";
+      const home = ROLE_HOME[session.role] ?? "/dealer/dashboard";
       navigate(home, { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Registration failed";
@@ -70,7 +70,7 @@ export default function RegisterPage() {
   return (
     <AuthShell
       title="Create your workspace"
-      subtitle="All roles get instant access. Practitioner and Deal Maker accounts unlock advanced tools."
+      subtitle="Choose a Legal Practitioner or Deal Maker workspace and get instant access."
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
@@ -110,7 +110,7 @@ export default function RegisterPage() {
         </div>
         <div className="space-y-2">
           <Label>Role</Label>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+          <Select value={role} onValueChange={(v) => setRole(v as RegistrationRole)}>
             <SelectTrigger>
               <SelectValue placeholder="Select a role" />
             </SelectTrigger>

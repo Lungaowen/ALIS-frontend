@@ -25,15 +25,11 @@ import DealerUpload from "./pages/dealer/DealerUpload.tsx";
 import DealerDeals from "./pages/dealer/DealerDeals.tsx";
 import DealerRisk from "./pages/dealer/DealerRisk.tsx";
 
-import UserDashboard from "./pages/user/UserDashboard.tsx";
-import UserUpload from "./pages/user/UserUpload.tsx";
-import UserDocuments from "./pages/user/UserDocuments.tsx";
-import UserReports from "./pages/user/UserReports.tsx";
 import ProfilePage from "@/pages/Profile";
 
 const queryClient = new QueryClient();
 
-const guard = (allow: ("ADMIN" | "USER" | "LEGAL_PRACTITIONER" | "DEAL_MAKER")[], el: JSX.Element) =>
+const guard = (allow: ("ADMIN" | "LEGAL_PRACTITIONER" | "DEAL_MAKER")[], el: JSX.Element) =>
   <ProtectedRoute allow={allow}>{el}</ProtectedRoute>;
 
 const App = () => (
@@ -69,18 +65,11 @@ const App = () => (
             <Route path="/dealer/deals" element={guard(["DEAL_MAKER"], <DealerDeals />)} />
             <Route path="/dealer/risk" element={guard(["DEAL_MAKER"], <DealerRisk />)} />
 
-            {/* User */}
-            <Route path="/user" element={<Navigate to="/user/dashboard" replace />} />
-            <Route path="/user/dashboard" element={guard(["USER"], <UserDashboard />)} />
-            <Route path="/user/upload" element={guard(["USER"], <UserUpload />)} />
-            <Route path="/user/documents" element={guard(["USER"], <UserDocuments />)} />
-            <Route path="/user/reports" element={guard(["USER"], <UserReports />)} />
-
             {/* Profile – accessible to any authenticated user */}
             <Route
               path="/profile"
               element={
-                <ProtectedRoute allow={["ADMIN", "USER", "LEGAL_PRACTITIONER", "DEAL_MAKER"]}>
+                <ProtectedRoute allow={["LEGAL_PRACTITIONER", "DEAL_MAKER"]}>
                   <ProfilePage />
                 </ProtectedRoute>
               }

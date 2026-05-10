@@ -23,7 +23,7 @@ export default function LoginPage() {
     try {
       const session = await login(email, password);
       toast.success(`Welcome back, ${session.fullName}`);
-      const home = ROLE_HOME[session.role] ?? "/user/dashboard";
+      const home = ROLE_HOME[session.role] ?? "/dealer/dashboard";
       navigate(location.state?.from ?? home, { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign in failed";

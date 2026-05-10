@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ProgressBar, Gauge } from "@/components/app/Primitives";
 import { RiskBadge } from "@/components/app/StatusBadges";
+import { useAuth } from "@/context/AuthContext";
 import {
   uploadDocument, getStatus, getResult, downloadReportPdf, triggerAnalysis,
   type ComplianceStatus, type ReportInfo,
@@ -29,6 +30,7 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
   const [dragOver, setDragOver] = useState(false);
   const pollRef = useRef<number | null>(null);
   const navigate = useNavigate();
+  const { role } = useAuth();
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -105,8 +107,9 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
         (result.riskLevel === "LOW" ? 40 : result.riskLevel === "MEDIUM" ? 20 : 0)
       )
     : 0;
-  const verdict = readiness >= 70 ? "READY TO PROCEED" : readiness >= 40 ? "REVIEW REQUIRED" : "HIGH RISK — DO NOT PROCEED";
+  const verdict = readiness >= 70 ? "READY TO PROCEED" : readiness >= 40 ? "REVIEW REQUIRED" : "HIGH RISK - DO NOT PROCEED";
   const verdictTone = readiness >= 70 ? "text-accent" : readiness >= 40 ? "text-gold" : "text-destructive";
+  const documentsPath = role === "DEAL_MAKER" ? "/dealer/deals" : "/legal/documents";
 
   return (
     <div className="space-y-6">
@@ -220,7 +223,7 @@ export function UploadAndPoll({ onCompleted, variant = "full", showReadiness = f
               <Download className="mr-1.5 h-3.5 w-3.5" /> Download Report
             </Button>
             <Button variant="outline" onClick={reanalyze}>Re-analyze</Button>
-            <Button variant="ghost" onClick={() => navigate(`/legal/documents`)}>View all documents</Button>
+            <Button variant="ghost" onClick={() => navigate(documentsPath)}>View all documents</Button>
           </div>
         </div>
       )}

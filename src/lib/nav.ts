@@ -6,21 +6,21 @@ export const ROLE_HOME: Record<Role, string> = {
   ADMIN: "/admin/dashboard",
   LEGAL_PRACTITIONER: "/legal/dashboard",
   DEAL_MAKER: "/dealer/dashboard",
-  USER: "/user/dashboard",
+  USER: "/login",
 };
 
 export const ROLE_LABEL: Record<Role, string> = {
   ADMIN: "Administrator",
   LEGAL_PRACTITIONER: "Legal Practitioner",
   DEAL_MAKER: "Deal Maker",
-  USER: "Client",
+  USER: "Legacy Client",
 };
 
 export const ROLE_THEME: Record<Role, { tone: string; accent: string; sidebar: string }> = {
   ADMIN: { tone: "Operational", accent: "bg-primary text-primary-foreground", sidebar: "bg-primary text-primary-foreground" },
   LEGAL_PRACTITIONER: { tone: "Professional", accent: "bg-accent text-accent-foreground", sidebar: "bg-primary text-primary-foreground" },
   DEAL_MAKER: { tone: "Decision", accent: "bg-gold text-gold-foreground", sidebar: "bg-primary text-primary-foreground" },
-  USER: { tone: "Friendly", accent: "bg-secondary text-secondary-foreground", sidebar: "bg-primary text-primary-foreground" },
+  USER: { tone: "Legacy", accent: "bg-secondary text-secondary-foreground", sidebar: "bg-primary text-primary-foreground" },
 };
 
 export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
@@ -29,7 +29,6 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: "/admin/clients", label: "Clients", iconName: "Users" },
     { to: "/admin/audit", label: "Audit Log", iconName: "ScrollText" },
     { to: "/admin/reports", label: "Reports", iconName: "BarChart3" },
-    { to: "/profile", label: "My Profile", iconName: "User" },
   ],
   LEGAL_PRACTITIONER: [
     { to: "/legal/dashboard", label: "Dashboard", iconName: "Gauge" },
@@ -45,11 +44,5 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { to: "/dealer/risk", label: "Risk Summary", iconName: "ShieldAlert" },
     { to: "/profile", label: "My Profile", iconName: "User" },
   ],
-  USER: [
-    { to: "/user/dashboard", label: "Home", iconName: "Home" },
-    { to: "/user/upload", label: "Upload", iconName: "UploadCloud" },
-    { to: "/user/documents", label: "My Documents", iconName: "FileText" },
-    { to: "/user/reports", label: "My Reports", iconName: "ClipboardCheck" },
-    { to: "/profile", label: "My Profile", iconName: "User" },
-  ],
+  USER: [],
 };

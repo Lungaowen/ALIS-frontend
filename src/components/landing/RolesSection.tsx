@@ -1,15 +1,7 @@
-import { Briefcase, Scale, UserCheck } from "lucide-react";
+import { Briefcase, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const roles = [
-  {
-    name: "USER",
-    icon: UserCheck,
-    title: "Individuals & founders",
-    tone: "default",
-    pitch: "Upload a contract, get a clear verdict — no legal jargon required.",
-    highlights: ["Upload documents", "Track compliance status", "Download PDF reports"],
-  },
   {
     name: "LEGAL PRACTITIONER",
     icon: Scale,
@@ -38,16 +30,15 @@ export function RolesSection() {
               For your team
             </p>
             <h2 className="mt-4 text-display text-4xl font-semibold tracking-tight sm:text-5xl">
-              One platform, three lenses.
+              One platform, two specialist lenses.
             </h2>
           </div>
           <p className="max-w-md text-muted-foreground">
-            Each role unlocks a tailored interface. Same data, different
-            decisions.
+            Legal practitioners and deal makers get tailored workspaces over the same compliance engine.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-6 lg:grid-cols-3">
+        <div className="mt-14 grid gap-6 lg:grid-cols-2">
           {roles.map((r, i) => {
             const Icon = r.icon;
             return (
@@ -65,15 +56,13 @@ export function RolesSection() {
                       "grid h-12 w-12 place-items-center rounded-lg shadow-soft transition-transform duration-500 group-hover:scale-110",
                       r.tone === "emerald"
                         ? "bg-gradient-emerald text-accent-foreground"
-                        : r.tone === "gold"
-                        ? "bg-gradient-gold text-gold-foreground"
-                        : "bg-gradient-ink text-primary-foreground"
+                        : "bg-gradient-gold text-gold-foreground"
                     )}
                   >
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="text-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                    Role · {r.name}
+                    Role: {r.name}
                   </span>
                 </div>
 

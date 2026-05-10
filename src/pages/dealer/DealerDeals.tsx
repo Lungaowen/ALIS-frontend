@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Download, RefreshCcw, ArrowRight } from "lucide-react";
+import { CalendarIcon, Download, Eye, FileDown, RefreshCcw } from "lucide-react";
 import { PortalLayout } from "@/components/app/PortalLayout";
 import { Spinner, EmptyState, ProgressBar } from "@/components/app/Primitives";
 import { StatusBadge, RiskBadge } from "@/components/app/StatusBadges";
@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/select";
 import {
   downloadReportPdf,
+  downloadDocumentFile,
   listDocuments,
   triggerAnalysis,
+  viewDocumentFile,
   type DocumentItem,
 } from "@/lib/alis";
 import { Link } from "react-router-dom";
@@ -32,6 +34,7 @@ export default function DealerDealsPage() {
   const [to, setTo] = useState<Date | undefined>();
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [analyzingId, setAnalyzingId] = useState<number | null>(null);
+  const [fileBusyId, setFileBusyId] = useState<number | null>(null);
 
   useEffect(() => {
     listDocuments()
@@ -53,6 +56,17 @@ export default function DealerDealsPage() {
       return true;
     });
   }, [docs, statusFilter, riskFilter, from, to]);
+
+  async function withFileBusy(documentId: number, action: () => Promise<void>) {
+    setFileBusyId(documentId);
+    try {
+      await action();
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "File action failed");
+    } finally {
+      setFileBusyId(null);
+    }
+  }
 
   return (
     <PortalLayout
@@ -110,6 +124,22 @@ export default function DealerDealsPage() {
                 </div>
               )}
               <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => withFileBusy(d.documentId, () => viewDocumentFile(d.documentId))}
+                  disabled={fileBusyId === d.documentId}
+                >
+                  <Eye className="mr-1 h-3.5 w-3.5" /> View file
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => withFileBusy(d.documentId, () => downloadDocumentFile(d.documentId, d.title))}
+                  disabled={fileBusyId === d.documentId}
+                >
+                  <FileDown className="mr-1 h-3.5 w-3.5" /> Original
+                </Button>
                 {d.reportId && (
                   <>
                     <Button size="sm" variant="outline" asChild>

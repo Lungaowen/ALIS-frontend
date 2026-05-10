@@ -1,13 +1,25 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, User, Lock, Briefcase, Scale } from "lucide-react"; // added icons
+import { Loader2, User, Lock, Briefcase, Scale, Power, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PortalLayout } from "@/components/app/PortalLayout";
 import { useAuth } from "@/context/AuthContext";
 import {
+  deactivateClientProfile,
+  deleteClientProfile,
   getClientProfile,
   updateClientProfile,
   type ClientProfile,
@@ -15,7 +27,7 @@ import {
 import { toast } from "sonner";
 
 export default function ProfilePage() {
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<ClientProfile | null>(null);
@@ -24,7 +36,15 @@ export default function ProfilePage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [barNumber, setBarNumber] = useState("");
+  const [lawFirm, setLawFirm] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [dealSpecialty, setDealSpecialty] = useState("");
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [loading, setLoading] = useState(false);
+  const isLegalPractitioner = profile?.role === "LEGAL_PRACTITIONER";
+  const isDealMaker = profile?.role === "DEAL_MAKER";
 
   useEffect(() => {
     if (!session) {
@@ -36,6 +56,10 @@ export default function ProfilePage() {
         setProfile(data);
         setFullName(data.fullName);
         setUsername(data.username ?? "");
+        setBarNumber(data.barNumber ?? "");
+        setLawFirm(data.lawFirm ?? "");
+        setCompanyName(data.companyName ?? "");
+        setDealSpecialty(data.dealSpecialty ?? "");
       })
       .catch((err) => toast.error(err?.message ?? "Could not load profile"));
   }, [session, navigate]);
@@ -46,6 +70,10 @@ export default function ProfilePage() {
       const updated = await updateClientProfile({
         fullName: fullName || undefined,
         username: username || undefined,
+        barNumber: isLegalPractitioner ? barNumber || null : undefined,
+        lawFirm: isLegalPractitioner ? lawFirm || null : undefined,
+        companyName: isDealMaker ? companyName || null : undefined,
+        dealSpecialty: isDealMaker ? dealSpecialty || null : undefined,
       });
       setProfile({ ...profile!, ...updated });
       toast.success("Profile updated");
@@ -53,6 +81,36 @@ export default function ProfilePage() {
       toast.error((err as Error).message ?? "Update failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deactivateAccount = async () => {
+    setLoading(true);
+    try {
+      await deactivateClientProfile();
+      toast.success("Account deactivated");
+      logout();
+      navigate("/login", { replace: true });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Deactivate failed");
+    } finally {
+      setLoading(false);
+      setConfirmDeactivate(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setLoading(true);
+    try {
+      await deleteClientProfile();
+      toast.success("Account deleted");
+      logout();
+      navigate("/", { replace: true });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Delete failed");
+    } finally {
+      setLoading(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -83,10 +141,6 @@ export default function ProfilePage() {
   };
 
   if (!profile) return null;
-
-  // Determine role-specific display
-  const isLegalPractitioner = profile.role === "LEGAL_PRACTITIONER";
-  const isDealMaker = profile.role === "DEAL_MAKER";
 
   return (
     <PortalLayout
@@ -159,15 +213,19 @@ export default function ProfilePage() {
                 <>
                   <div>
                     <Label>Bar Number</Label>
-                    <p className="mt-1 text-sm font-medium">
-                      {profile.barNumber || "Not provided"}
-                    </p>
+                    <Input
+                      value={barNumber}
+                      onChange={(e) => setBarNumber(e.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <Label>Law Firm</Label>
-                    <p className="mt-1 text-sm font-medium">
-                      {profile.lawFirm || "Not provided"}
-                    </p>
+                    <Input
+                      value={lawFirm}
+                      onChange={(e) => setLawFirm(e.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                 </>
               )}
@@ -176,18 +234,26 @@ export default function ProfilePage() {
                 <>
                   <div>
                     <Label>Company Name</Label>
-                    <p className="mt-1 text-sm font-medium">
-                      {profile.companyName || "Not provided"}
-                    </p>
+                    <Input
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <Label>Deal Specialty</Label>
-                    <p className="mt-1 text-sm font-medium">
-                      {profile.dealSpecialty || "Not provided"}
-                    </p>
+                    <Input
+                      value={dealSpecialty}
+                      onChange={(e) => setDealSpecialty(e.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                 </>
               )}
+              <Button onClick={saveProfile} disabled={loading} className="w-fit">
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save role details
+              </Button>
             </div>
           </div>
         )}
@@ -240,7 +306,64 @@ export default function ProfilePage() {
             </Button>
           </div>
         </div>
+
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-destructive/10 p-2">
+              <Power className="h-5 w-5 text-destructive" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Account access</h2>
+              <p className="text-xs text-muted-foreground">
+                Deactivate or permanently delete your workspace.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setConfirmDeactivate(true)}>
+              <Power className="mr-1.5 h-3.5 w-3.5" /> Deactivate
+            </Button>
+            <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete account
+            </Button>
+          </div>
+        </div>
       </div>
+
+      <AlertDialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will be signed out and this account will no longer be able to log in until it is restored.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={deactivateAccount}>Deactivate</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes your account and related workspace records. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={deleteAccount}
+            >
+              Delete account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PortalLayout>
   );
 }

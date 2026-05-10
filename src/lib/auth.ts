@@ -1,6 +1,7 @@
 import { httpPost } from "./http";
 
 export type Role = "ADMIN" | "USER" | "LEGAL_PRACTITIONER" | "DEAL_MAKER";
+export type RegistrationRole = Extract<Role, "LEGAL_PRACTITIONER" | "DEAL_MAKER">;
 
 export interface AuthSession {
   clientId: number;
@@ -59,7 +60,7 @@ export async function register(input: {
   fullName: string;
   email: string;
   password: string;
-  role?: Role;
+  role: RegistrationRole;
   companyName?: string;
   dealSpecialty?: string;
   barNumber?: string;
